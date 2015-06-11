@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="A layout example that shows off a blog page with a list of posts.">
+    <title>YS-L</title>
+    <link rel="stylesheet" href="http://yui.yahooapis.com/pure/0.5.0/pure-min.css">
+    <!--[if lte IE 8]> 
+        <link rel="stylesheet" href="http://yui.yahooapis.com/pure/0.5.0/grids-responsive-old-ie-min.css">   
+    <![endif]-->
+    <!--[if gt IE 8]><!--> 
+        <link rel="stylesheet" href="http://yui.yahooapis.com/pure/0.5.0/grids-responsive-min.css"> 
+    <!--<![endif]-->
+ 
+    <!--[if lte IE 8]>
+        <link rel="stylesheet" href="css/layouts/blog-old-ie.css">
+    <![endif]-->
+    <!--[if gt IE 8]><!-->
+        <link rel="stylesheet" href="../../css/blog.css">
+    <!--<![endif]-->
+  </head>
+
+  <body>
+    <div id="layout" class="pure-g">
+    <div class="sidebar pure-u-1 pure-u-md-1-5">
+      <div class="header">
+        <h1 class="brand-title">YS-L</h1>
+        <h2 class="brand-tagline">Random stuffs</h2>
+        <nav class="nav">
+          <ul class="nav-list">
+            <li class="nav-item">
+              <a class="pure-button" href="../../">Home</a>
+            </li>
+            <li class="nav-item">
+              <a class="pure-button" href="../../all">Posts</a>
+            </li>
+            <li class="nav-item">
+              <a class="pure-button" href="../../about">About</a>
+            </li>
+          </ul>
+        </nav>
+      </div>
+    </div>
+
+    <div class="content pure-u-1 pure-u-md-3-4">
+      <div>
+        <h2 class="post-title">Hello World</h2>
+        <div class="post-description">
+          <!-- A single blog post -->
+<header class="post-header">
+  <p class="post-meta">
+    By <a href="../../about" class="post-author"> YS-L </a> on July 29, 2014
+  </p>
+</header>
+
+ <p>I think it’s good to have a blog where I can share stuffs that I find interesting or useful, silly projects that have kept me busy in my free time, and other things like that.</p>
+<p>I’m doing it with Hakyll in order to make a good excuse for learning more about Haskell. Another excuse of this sort was xmonad – the tiling window manager written in Haskell, which makes me happily forget what a desktop is. There is really no going back!</p>
+<p>So here it is, although there’s nothing here yet in the meantime, enjoy!</p>
+
+        </div>
+        <div class="footer">
+          <div class="pure-menu pure-menu-horizontal pure-menu-open">
+            <ul>
+              <li><a href="http://twitter.com/ysliau">Twitter</a></li>
+              <li><a href="http://github.com/YS-L">GitHub</a></li>
+            </ul>
+          </div>
+          <span class="pure-text">Powered by</span> <a href="http://jaspervdj.be/hakyll">Hakyll</a>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

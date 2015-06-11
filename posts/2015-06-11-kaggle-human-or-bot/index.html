@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="A layout example that shows off a blog page with a list of posts.">
+    <title>YS-L</title>
+    <link rel="stylesheet" href="http://yui.yahooapis.com/pure/0.5.0/pure-min.css">
+    <!--[if lte IE 8]> 
+        <link rel="stylesheet" href="http://yui.yahooapis.com/pure/0.5.0/grids-responsive-old-ie-min.css">   
+    <![endif]-->
+    <!--[if gt IE 8]><!--> 
+        <link rel="stylesheet" href="http://yui.yahooapis.com/pure/0.5.0/grids-responsive-min.css"> 
+    <!--<![endif]-->
+ 
+    <!--[if lte IE 8]>
+        <link rel="stylesheet" href="css/layouts/blog-old-ie.css">
+    <![endif]-->
+    <!--[if gt IE 8]><!-->
+        <link rel="stylesheet" href="../../css/blog.css">
+    <!--<![endif]-->
+  </head>
+
+  <body>
+    <div id="layout" class="pure-g">
+    <div class="sidebar pure-u-1 pure-u-md-1-5">
+      <div class="header">
+        <h1 class="brand-title">YS-L</h1>
+        <h2 class="brand-tagline">Random stuffs</h2>
+        <nav class="nav">
+          <ul class="nav-list">
+            <li class="nav-item">
+              <a class="pure-button" href="../../">Home</a>
+            </li>
+            <li class="nav-item">
+              <a class="pure-button" href="../../all">Posts</a>
+            </li>
+            <li class="nav-item">
+              <a class="pure-button" href="../../about">About</a>
+            </li>
+          </ul>
+        </nav>
+      </div>
+    </div>
+
+    <div class="content pure-u-1 pure-u-md-3-4">
+      <div>
+        <h2 class="post-title">Kaggle Human or Robot Challenge</h2>
+        <div class="post-description">
+          <!-- A single blog post -->
+<header class="post-header">
+  <p class="post-meta">
+    By <a href="../../about" class="post-author"> YS-L </a> on June 11, 2015
+  </p>
+</header>
+
+ <p>This is a brief write-up on my approach in a recent interesting Kaggle <a href="https://www.kaggle.com/c/facebook-recruiting-iv-human-or-bot">competition</a> hosted by Facebook. In a nutshell, we are given some data describing user level bidding behaviours in an online penny auction website (I didn’t know there exists such a thing!). The goal is to come up with a predictive model that can distinguish between real human bidders and automated robot bidders. Without any domain knowledge, let’s put on the ignorant data scientist’s hat and dive right in.</p>
+<h2 id="data-exploration">Data Exploration</h2>
+<p>A quick look at the data by plotting the sorted timestamps of the bidding activities shows that there are three distinct “periods” in the dataset.</p>
+<p>A quick <code>value_counts()</code> on each column in the dataset very roughly shows how much information is contained in the dataset:</p>
+<pre><code>bid_id         7656334
+bidder_id         6614
+auction          15051
+merchandise         10
+device            7351
+time            776529
+country            199
+ip             2303991
+url            1786351</code></pre>
+<p>Another interesting observation is about the <code>address</code> and <code>payment_account</code> given as meta-data associated with each bidder. Although the 37-character hashes do look like <code>MD5</code>, their distributions are clearly not completely random. For example, 52.3% of the bidders have their address hashes prefixed by <code>a3d2de7675556553a5f08e4c88d2c228</code>; 18.6% of the bidders have their account hashes prefixed by the same magic hash. This artifact did contribute slightly in the final performance of my model, as will be described in the next section shortly.</p>
+<h2 id="feature-engineering">Feature Engineering</h2>
+<p>The following lists the features I found useful and included in my model. Obviously, each of these features are extracted for every bidder.</p>
+<p>The first set of features makes use of the categorical information contained in the data, such as country, url, ip and device:</p>
+<ul>
+<li><p><strong>Basic counts</strong>: Counts of unique auction, device, country, ip and url</p></li>
+<li><p><strong>Basic counts by auction</strong>: Same as above, but do the counting within each auction and extract the resulting statistics (mean, median, std)</p></li>
+<li><p><strong>Shared device</strong>: Some devices are shared by multiple bidders. This feature counts the number of bids that use such shared device. Repeat the counting for each auction and extract the statistics.</p></li>
+<li><p><strong>Country based</strong>: One-hot encode the most frequently occurring (top 10%) countries in the dataset. Extract the number of bids associated with these countries.</p></li>
+<li><p><strong>URL based</strong>: Number of bids having the URL <code>vasstdc27m7nks3</code> or other URLs (i.e. similar to one-hot encoding with only two dimensions).</p></li>
+<li><p><strong>IP based</strong>: One-hot encode the most frequently occurring IP addresses (top 20) in the dataset. Extract the number of bids associated with these IPs.</p></li>
+<li><p><strong>Device based</strong>: One-hot encode the most frequently occurring devices (top 40) in the dataset. Extract the number of bids associated with these devices.</p></li>
+</ul>
+<p>The second set of features is derived mainly from time information:</p>
+<ul>
+<li><p><strong>Period based</strong>: Number of bids in each of the three “periods”</p></li>
+<li><p><strong>Biding (inverse) frequency</strong>: Statistics of the time differences between bids (mean, std)</p></li>
+<li><p><strong>Reaction time</strong>: Statistics of the time lapsed from the last bid within each auction</p></li>
+<li><p><strong>Auction switch</strong>: Number of switch between different auctions, when bidding activities are sorted chronologically</p></li>
+<li><p><strong>Bid timimg</strong>: Define “bid timing” as the chronological order of a bid in an auction or a period normalized to [0, 1]. For example, the very first bid in each auction has a bid timing of 0. The resulting features are obtained by computing the statistics of bid timing for each auction, as well as for each “period”.</p></li>
+<li><p><strong>First bid</strong>: Statistics bid timing of the first bid within each auction. Interestingly, its counterpart “Last Bid” feature is not useful, probably because for many auctions, we don’t even know whether it has already ended.</p></li>
+</ul>
+<p>And finally, the mysterious meta-data information:</p>
+<ul>
+<li><strong>Address hash prefix</strong>: One-hot encode the address hash prefix (of length 32) into two categories: <code>a3d2de7675556553a5f08e4c88d2c228</code> and others.</li>
+</ul>
+<p>Combining the above feature sets yields a feature dimension of about 180.</p>
+<h2 id="modeling">Modeling</h2>
+<p>I use the extra-trees classifier (implemented as <code>ExtraTreesClassifier</code> from the <code>scikit-learn</code> library) as the modeling algorithm. It turns out to yield the best local validation score among the other go-to methods, such as random forests and gradient boosted trees. Due to the way the labels are assigned in this dataset, they are believed to be rather noisy. This perhaps explains why the more powerful gradient boosted trees does not generalize as well as the extra-trees classifier. I have seen this method giving good results in another dataset, which also contains noisy labels.</p>
+<p>The final model is a simple average of multiple models trained using different random seeds.</p>
+<h2 id="evaluation-pipeline">Evaluation Pipeline</h2>
+<p>Normally, I use a 5-fold cross validation to evaluate changes in the model pipeline. For this dataset, I feel the need to level it up by repeating it 20 times, yielding a total of 100 different folds. Luckily, due to the small size of the dataset, the processing time is still very much tolerable. I look at both the mean and standard deviation of the cross-validated AUC score to decide whether each change in features or parameters is helpful, optimizing for the most stable result when improvement is infinitesimal.</p>
+<p>The leader board score is indeed not very helpful, due to the small sample size.</p>
+<h2 id="things-that-did-not-help">Things that Did Not Help</h2>
+<p>As usual, many things don’t work. Some of which that I still remember are:</p>
+<ul>
+<li><p>Interaction between categorical features (e.g. the use of two particular devices, occurrences of two particular countries)</p></li>
+<li><p>Fancy blending by optimizing weights between different models (for this I also trained other models such as neural network, k-NN and linear models that did not work as well individually)</p></li>
+<li><p>The merchandise field. Tried multiple ways to derive features from this information but none is actually useful.</p></li>
+</ul>
+<h2 id="ending-notes">Ending Notes</h2>
+<p>There are some interesting ideas that other people have used, which I have not thought of:</p>
+<ul>
+<li><p>Further decoding of time unit to extract time-window based features that make sense</p></li>
+<li><p>Treating bidding activities as text and borrow ideas from text classification methods</p></li>
+<li><p>SMOTE-based re-sampling technique to address the class imbalance issue</p></li>
+</ul>
+<p>My final ranking jumped up a bit when the private leader board is revealed, to the 11th place. Not too bad, since near the end of competition I was just hoping to stay within the top 10%. Hats off to the top participants, especially the winner who dominated everyone with just 3 submissions. Very impressive!</p>
+
+        </div>
+        <div class="footer">
+          <div class="pure-menu pure-menu-horizontal pure-menu-open">
+            <ul>
+              <li><a href="http://twitter.com/ysliau">Twitter</a></li>
+              <li><a href="http://github.com/YS-L">GitHub</a></li>
+            </ul>
+          </div>
+          <span class="pure-text">Powered by</span> <a href="http://jaspervdj.be/hakyll">Hakyll</a>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

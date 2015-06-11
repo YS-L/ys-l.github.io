@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="A layout example that shows off a blog page with a list of posts.">
+    <title>YS-L</title>
+    <link rel="stylesheet" href="http://yui.yahooapis.com/pure/0.5.0/pure-min.css">
+    <!--[if lte IE 8]> 
+        <link rel="stylesheet" href="http://yui.yahooapis.com/pure/0.5.0/grids-responsive-old-ie-min.css">   
+    <![endif]-->
+    <!--[if gt IE 8]><!--> 
+        <link rel="stylesheet" href="http://yui.yahooapis.com/pure/0.5.0/grids-responsive-min.css"> 
+    <!--<![endif]-->
+ 
+    <!--[if lte IE 8]>
+        <link rel="stylesheet" href="css/layouts/blog-old-ie.css">
+    <![endif]-->
+    <!--[if gt IE 8]><!-->
+        <link rel="stylesheet" href="./css/blog.css">
+    <!--<![endif]-->
+  </head>
+
+  <body>
+    <div id="layout" class="pure-g">
+    <div class="sidebar pure-u-1 pure-u-md-1-5">
+      <div class="header">
+        <h1 class="brand-title">YS-L</h1>
+        <h2 class="brand-tagline">Random stuffs</h2>
+        <nav class="nav">
+          <ul class="nav-list">
+            <li class="nav-item">
+              <a class="pure-button" href="./">Home</a>
+            </li>
+            <li class="nav-item">
+              <a class="pure-button" href="./all">Posts</a>
+            </li>
+            <li class="nav-item">
+              <a class="pure-button" href="./about">About</a>
+            </li>
+          </ul>
+        </nav>
+      </div>
+    </div>
+
+    <div class="content pure-u-1 pure-u-md-3-4">
+      <div>
+        <h2 class="post-title">Home</h2>
+        <div class="post-description">
+          <h2>What's news</h2>
+
+You're here for some mysterious reasons. Welcome.
+
+<h2>Posts</h2>
+
+<ul>
+    
+        <li>
+            <a href="./posts/2015-06-11-kaggle-human-or-bot/">Kaggle Human or Robot Challenge</a> - June 11, 2015
+        </li>
+    
+        <li>
+            <a href="./posts/2014-07-29-hello/">Hello World</a> - July 29, 2014
+        </li>
+    
+</ul>
+
+
+        </div>
+        <div class="footer">
+          <div class="pure-menu pure-menu-horizontal pure-menu-open">
+            <ul>
+              <li><a href="http://twitter.com/ysliau">Twitter</a></li>
+              <li><a href="http://github.com/YS-L">GitHub</a></li>
+            </ul>
+          </div>
+          <span class="pure-text">Powered by</span> <a href="http://jaspervdj.be/hakyll">Hakyll</a>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
