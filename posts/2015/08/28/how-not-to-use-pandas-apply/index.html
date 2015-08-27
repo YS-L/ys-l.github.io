@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!--<meta name="description" content="A layout example that shows off a blog page with a list of posts."> -->
+    <title>YS-L - How Not to Use pandas' "apply"</title>
+    <link rel="stylesheet" href="//cdn.jsdelivr.net/g/pure@0.6.0(pure-min.css+grids-responsive-min.css)">
+    <!--
+    <link rel="stylesheet" href="http://yui.yahooapis.com/pure/0.5.0/pure-min.css">
+    -->
+    <!--[if lte IE 8]>
+        <link rel="stylesheet" href="http://yui.yahooapis.com/pure/0.5.0/grids-responsive-old-ie-min.css">
+    <![endif]-->
+    <!--[if gt IE 8]><!-->
+        <!--
+        <link rel="stylesheet" href="http://yui.yahooapis.com/pure/0.5.0/grids-responsive-min.css">
+        -->
+    <!--<![endif]-->
+
+    <!--[if lte IE 8]>
+        <link rel="stylesheet" href="css/layouts/blog-old-ie.css">
+    <![endif]-->
+    <!--[if gt IE 8]><!-->
+        <link rel="stylesheet" href="../../../../../css/blog.css">
+    <!--<![endif]-->
+    <link rel="stylesheet" href="//maxcdn.bootstrapcdn.com/font-awesome/4.3.0/css/font-awesome.min.css">
+    <link rel="stylesheet" href="../../../../../css/syntax.css">
+  </head>
+
+  <body>
+    <div id="layout" class="pure-g">
+
+      <div class="sidebar pure-u-1">
+        <div class="header">
+          <h1 class="brand-title">YS-L</h1>
+          <h2 class="brand-tagline">127.0.0.1</h2>
+          <nav class="nav">
+            <ul class="nav-list">
+              <li class="nav-item">
+                <a class="pure-button" href="../../../../../">Home</a>
+              </li>
+              <!--
+              <li class="nav-item">
+                <a class="pure-button" href="/all">Posts</a>
+              </li>
+              -->
+              <li class="nav-item">
+                <a class="pure-button" href="../../../../../about">About</a>
+              </li>
+            </ul>
+            <div class="icon-links">
+              <a href="http://twitter.com/ysliau"><i class="fa fa-twitter fa-2x"></i></a>
+              <a href="http://github.com/YS-L"><i class="fa fa-github fa-2x"></i></a>
+            </div>
+          </nav>
+        </div>
+      </div>
+
+      <div class="pure-u-1">
+          <div class="content">
+          <p class="post-title">How Not to Use pandas' "apply"</p>
+          <div class="post-description">
+            <!-- A single blog post -->
+<header class="post-header">
+  <p class="post-meta">
+    By <a href="../../../../../about" class="post-author"> YS-L </a> on August 28, 2015
+  </p>
+</header>
+
+ <p>Recently, I tripped over a use of the <code>apply</code> function in pandas in perhaps one of worst possible ways. The scenario is this: we have a DataFrame of a moderate size, say 1 million rows and a dozen columns. We want to perform some row-wise computation on the DataFrame and based on which generate a few new columns. <!--more--></p>
+<p>Let’s also assume that the computation is rather complex, so those wonderful vectorized operations in that comes with pandas are out of question (the official <a href="http://pandas.pydata.org/pandas-docs/stable/enhancingperf.html">performance enhancement tips</a> is a nice read on this). And luckily it has been packaged as a function that returns a few values:</p>
+<div class="sourceCode"><pre class="sourceCode python"><code class="sourceCode python"><span class="kw">def</span> complex_computation(a):
+    <span class="co"># do lots of work here...</span>
+    <span class="co"># ...</span>
+    <span class="co"># and finally it's done.</span>
+    <span class="cf">return</span> value1, value2, value3</code></pre></div>
+<p>We want to put the computed results together into a new DataFrame.</p>
+<p>A natural solution is to call the <code>apply</code> function of the DataFrame and pass in a function which does the said computation:</p>
+<div class="sourceCode"><pre class="sourceCode python"><code class="sourceCode python"><span class="kw">def</span> func(row):
+    v1, v2, v3 <span class="op">=</span> complex_computation(row[[<span class="st">'some'</span>, <span class="st">'columns'</span>]].values)
+    <span class="cf">return</span> pd.Series({<span class="st">'NewColumn1'</span>: v1,
+                      <span class="st">'NewColumn2'</span>: v2,
+                      <span class="co">'NewColumn3'</span>: v3})
+df_result <span class="op">=</span> df.<span class="bu">apply</span>(func, axis<span class="op">=</span><span class="dv">1</span>)</code></pre></div>
+<p>According to the <a href="http://pandas.pydata.org/pandas-docs/stable/generated/pandas.DataFrame.apply.html">documentation</a> of <code>apply</code>, the result depends on what <code>func</code> returns. If we pass in such a <code>func</code> (returning a Series instead of a single value), the result would be a nice DataFrame containing three columns as named.</p>
+<p>Expressed in a more loopy manner, the following yields an equivalent result:</p>
+<div class="sourceCode"><pre class="sourceCode python"><code class="sourceCode python">v1s, v2s, v3s <span class="op">=</span> [], [], []
+<span class="cf">for</span> _, row <span class="op">in</span> df.iterrows():
+    v1, v2, v3 <span class="op">=</span> complex_computation(row[[<span class="st">'some'</span>, <span class="st">'columns'</span>]].values)
+    v1s.append(v1)
+    v2s.append(v2)
+    v3s.append(v3)
+df_result <span class="op">=</span> pd.DataFrame({<span class="st">'NewColumn1'</span>: v1s,
+                          <span class="st">'NewColumn2'</span>: v2s,
+                          <span class="co">'NewColumn3'</span>: v3s})</code></pre></div>
+<p>However, at the first glance, the loopy version just does not seem elegant compared to the <code>apply</code> version. Plus, leaving the work of putting together the results to pandas seems to be a good idea – could some magics be performed in the background by pandas, making the loop complete faster?</p>
+<p>That was what I thought, but it turns out we have just constructed a silent memory eating monster with such use of <code>apply</code>. To see that, let’s put together the above pieces of code and consider a minimal example (and the pandas version here is <code>0.16.2</code>):</p>
+<div class="sourceCode"><pre class="sourceCode python"><code class="sourceCode python"><span class="im">import</span> pandas <span class="im">as</span> pd
+<span class="im">import</span> numpy <span class="im">as</span> np
+<span class="op">%</span>load_ext memory_profiler
+
+<span class="kw">def</span> complex_computation(a):
+    <span class="co"># Okay, this is not really complex, but this is just for illustration.</span>
+    <span class="co"># To keep reproducibility, we can't make it order a pizza here.</span>
+    <span class="co"># Anyway, pretend that there is no way to vectorize this operation.</span>
+    <span class="cf">return</span> a[<span class="dv">0</span>]<span class="op">-</span>a[<span class="dv">1</span>], a[<span class="dv">0</span>]<span class="op">+</span>a[<span class="dv">1</span>], a[<span class="dv">0</span>]<span class="op">*</span>a[<span class="dv">1</span>]
+
+<span class="kw">def</span> func(row):
+    v1, v2, v3 <span class="op">=</span> complex_computation(row.values)
+    <span class="cf">return</span> pd.Series({<span class="st">'NewColumn1'</span>: v1,
+                      <span class="st">'NewColumn2'</span>: v2,
+                      <span class="co">'NewColumn3'</span>: v3})
+
+<span class="kw">def</span> run_apply(df):
+    df_result <span class="op">=</span> df.<span class="bu">apply</span>(func, axis<span class="op">=</span><span class="dv">1</span>)
+    <span class="cf">return</span> df_result
+
+<span class="kw">def</span> run_loopy(df):
+    v1s, v2s, v3s <span class="op">=</span> [], [], []
+    <span class="cf">for</span> _, row <span class="op">in</span> df.iterrows():
+        v1, v2, v3 <span class="op">=</span> complex_computation(row.values)
+        v1s.append(v1)
+        v2s.append(v2)
+        v3s.append(v3)
+    df_result <span class="op">=</span> pd.DataFrame({<span class="st">'NewColumn1'</span>: v1s,
+                              <span class="st">'NewColumn2'</span>: v2s,
+                              <span class="co">'NewColumn3'</span>: v3s})
+    <span class="cf">return</span> df_result
+
+<span class="kw">def</span> make_dataset(N):
+    np.random.seed(<span class="dv">0</span>)
+    df <span class="op">=</span> pd.DataFrame({
+            <span class="st">'a'</span>: np.random.randint(<span class="dv">0</span>, <span class="dv">100</span>, N),
+            <span class="st">'b'</span>: np.random.randint(<span class="dv">0</span>, <span class="dv">100</span>, N)
+         })
+    <span class="cf">return</span> df
+
+<span class="kw">def</span> test():
+    <span class="im">from</span> pandas.util.testing <span class="im">import</span> assert_frame_equal
+    df <span class="op">=</span> make_dataset(<span class="dv">100</span>)
+    df_res1 <span class="op">=</span> run_loopy(df)
+    df_res2 <span class="op">=</span> run_apply(df)
+    assert_frame_equal(df_res1, df_res2)
+    <span class="bu">print</span> <span class="st">'OK'</span>
+
+df <span class="op">=</span> make_dataset(<span class="dv">1000000</span>)  </code></pre></div>
+<p>Before anything else, let’s check the correctness first on a small set of input data (i.e. both implementations yield identical results):</p>
+<div class="sourceCode"><pre class="sourceCode python"><code class="sourceCode python">test()
+<span class="co"># OK</span></code></pre></div>
+<p>And now it’s time for some <code>%memit</code>. The loopy version gives:</p>
+<div class="sourceCode"><pre class="sourceCode python"><code class="sourceCode python"><span class="op">%</span>memit run_loopy(df)
+<span class="co"># peak memory: 272.18 MiB, increment: 181.38 MiB</span></code></pre></div>
+<p>How about the elegant <code>apply</code>?</p>
+<div class="sourceCode"><pre class="sourceCode python"><code class="sourceCode python"><span class="op">%</span>memit run_apply(df)
+<span class="co"># peak memory: 3941.29 MiB, increment: 3850.10 MiB</span></code></pre></div>
+<p>Oops, that’s a 10 times more in memory usage! Not good. Apparently, in order to achieve its flexibility, the <code>apply</code> function somehow has to store all the intermediate <code>Series</code> that appeared along the way, or something like that.</p>
+<p>Speed-wise we have:</p>
+<div class="sourceCode"><pre class="sourceCode python"><code class="sourceCode python"><span class="op">%</span>timeit run_loopy(df)
+<span class="co"># 1 loops, best of 3: 36.2 s per loop</span>
+
+<span class="op">%</span>timeit run_apply(df)
+<span class="co"># 1 loops, best of 3: 2min 48s per loop</span></code></pre></div>
+<p>Looping is slow; but it is actually faster than this way of using <code>apply</code>. The overhead of creating a Series for every input row is just too much.</p>
+<p>Combining both its memory and time inefficiency, I have just presented to you one of the worst possible ways to use the <code>apply</code> function in pandas. For some reason, this did not appear obvious to me when I first encounter it.</p>
+<p><strong>TL;DR</strong>: When applying a function on a DataFrame using <code>DataFrame.apply</code> by row, be careful of what the function returns – making it return a <code>Series</code> so that <code>apply</code> results in a DataFrame can be very memory inefficient on input with many rows. And it is slow. Very slow.</p>
+
+          </div>
+          <div class="footer">
+            <span class="pure-text">Powered by</span> <a href="http://jaspervdj.be/hakyll">Hakyll</a>
+          </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </body>
+</html>
