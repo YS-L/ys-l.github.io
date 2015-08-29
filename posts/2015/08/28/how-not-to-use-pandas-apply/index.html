@@ -95,7 +95,7 @@ df_result <span class="op">=</span> pd.DataFrame({<span class="st">'NewColumn1'<
                           <span class="st">'NewColumn2'</span>: v2s,
                           <span class="co">'NewColumn3'</span>: v3s})</code></pre></div>
 <p>However, at the first glance, the loopy version just does not seem elegant compared to the <code>apply</code> version. Plus, leaving the work of putting together the results to pandas seems to be a good idea – could some magics be performed in the background by pandas, making the loop complete faster?</p>
-<p>That was what I thought, but it turns out we have just constructed a silent memory eating monster with such use of <code>apply</code>. To see that, let’s put together the above pieces of code and consider a minimal example (and the pandas version here is <code>0.16.2</code>):</p>
+<p>That was what I thought, but it turns out we have just constructed a silent memory eating monster with such use of <code>apply</code>. To see that, let’s put together the above pieces of code and consider a minimal reproducible example (and the pandas version here is <code>0.16.2</code>):</p>
 <div class="sourceCode"><pre class="sourceCode python"><code class="sourceCode python"><span class="im">import</span> pandas <span class="im">as</span> pd
 <span class="im">import</span> numpy <span class="im">as</span> np
 <span class="op">%</span>load_ext memory_profiler
@@ -161,8 +161,8 @@ df <span class="op">=</span> make_dataset(<span class="dv">1000000</span>)  </co
 
 <span class="op">%</span>timeit run_apply(df)
 <span class="co"># 1 loops, best of 3: 2min 48s per loop</span></code></pre></div>
-<p>Looping is slow; but it is actually faster than this way of using <code>apply</code>. The overhead of creating a Series for every input row is just too much.</p>
-<p>Combining both its memory and time inefficiency, I have just presented to you one of the worst possible ways to use the <code>apply</code> function in pandas. For some reason, this did not appear obvious to me when I first encounter it.</p>
+<p>Looping is slow; but it is actually a lot faster than this way of using <code>apply</code>! The overhead of creating a Series for every input row is just too much.</p>
+<p>Combining both its memory and time inefficiency, I have just presented to you one of the worst possible ways to use the <code>apply</code> function in pandas. For some reason, this did not appear obvious to me when I first encountered it.</p>
 <p><strong>TL;DR</strong>: When applying a function on a DataFrame using <code>DataFrame.apply</code> by row, be careful of what the function returns – making it return a <code>Series</code> so that <code>apply</code> results in a DataFrame can be very memory inefficient on input with many rows. And it is slow. Very slow.</p>
 
           </div>
