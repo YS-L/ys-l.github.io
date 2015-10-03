@@ -87,7 +87,7 @@
     <span class="co"># Measure the performance</span>
     <span class="co"># After all the bulky work, return a number or a small dict, etc.</span>
     <span class="cf">return</span> score</code></pre></div>
-<p>In a single Python script, repeatedly calling the above bulky function can cause the memory usage to grow over time, even though every calls are really independent of each other. That is to say, some amount of lingering memory will accumulate after every call the the function, as if there is an on-going memory leak. This continues until one has to restart the script to trigger a “refresh”.</p>
+<p>In a single Python script, repeatedly calling the above bulky function can cause the memory usage to grow over time, even though every calls are really independent of each other. That is to say, some amount of lingering memory will accumulate after every call the the function, as if there is an on-going memory leak. This continues until one has to restart the script to trigger a “refresh” to free up the memory.</p>
 <h2 id="possible-solutions">Possible solutions</h2>
 <h4 id="find-out-where-the-memory-leak-is-with-a-profiler">0. Find out where the memory leak is with a profiler</h4>
 <p>This is probably the only real solution to the problem. However, the effort needed might be too much for exploratory code that will not go into production. Sometimes, something more pragmatic is needed.</p>
@@ -116,7 +116,7 @@ result <span class="op">=</span> pool.<span class="bu">apply</span>(evaluate, fe
 <span class="st">    569     def _set(self, i, obj):</span>
 
 <span class="st">ValueError: operands could not be broadcast together with shapes (10,2) (10,20)</span></code></pre></div>
-<p>regardless of where the exception is actually raised. As one can guess, staring at the source code of the multiprocessing module is not particularly helpful for debugging an error in the user level code. Some further hacking is necessary to float the actual context up to the user on exception. Also, having to interact with the <code>Pool</code> object every time is kind of distracting. In other words, this solution is close but not yet ideal.</p>
+<p>regardless of where the exception is actually raised. As one can guess, staring at the source code of the multiprocessing module is not particularly informative for debugging an error in the user level code<a href="#fn1" class="footnoteRef" id="fnref1"><sup>1</sup></a>. Some further hacking is necessary to float the actual context up to the user on exception. Also, having to interact with the <code>Pool</code> object every time is kind of distracting. In other words, this solution is close but not yet ideal.</p>
 <h2 id="the-processify-decorator">The <code>processify</code> decorator</h2>
 <p>Recently, I found a neat piece of code in the wild that solves this problem – the <code>processify</code> decorator. Full credit goes to <a href="https://gist.github.com/schlamar/2311116">schlamar</a> who posted it on GitHub Gist.</p>
 <p>To use it, simply decorate the bulky function:</p>
@@ -132,11 +132,121 @@ result <span class="op">=</span> pool.<span class="bu">apply</span>(evaluate, fe
 <ol style="list-style-type: decimal">
 <li>Very easy to use, no modification to the original function required (in fact, this is probably a perfect use case of a decorator)</li>
 <li>A trick that seems to successfully pickle nested function</li>
-<li>Able to show some useful context on exception as opposed to the case above using <code>Pool</code></li>
+<li>Able to show some useful context on exception as opposed to the case above using <code>Pool</code>.</li>
 </ol>
+<p>Regarding point (3) above, consider the following code:</p>
+<div class="sourceCode"><pre class="sourceCode python"><code class="sourceCode python"><span class="at">@processify</span>
+<span class="kw">def</span> work():
+    <span class="co">&quot;&quot;&quot;Get things done here&quot;&quot;&quot;</span>
+    <span class="im">import</span> numpy <span class="im">as</span> np
+    np.random.rand(<span class="dv">10</span>,<span class="dv">2</span>) <span class="op">+</span> np.random.rand(<span class="dv">10</span>,<span class="dv">20</span>)
+    <span class="cf">return</span> np.random.rand(<span class="dv">10</span>,<span class="dv">2</span>)
+
+<span class="cf">if</span> <span class="va">__name__</span> <span class="op">==</span> <span class="st">'__main__'</span>:
+    work()</code></pre></div>
+<p>The error traceback is shown as:</p>
+<div class="sourceCode"><pre class="sourceCode python"><code class="sourceCode python"><span class="op">---------------------------------------------------------------------------</span>
+<span class="pp">ValueError</span>                                Traceback (most recent call last)
+<span class="op">&lt;</span>ipython<span class="op">-</span><span class="bu">input</span><span class="dv">-3</span><span class="op">-</span>c2d43235dcae<span class="op">&gt;</span> <span class="op">in</span> <span class="op">&lt;</span>module<span class="op">&gt;</span>()
+     <span class="dv">66</span>
+     <span class="dv">67</span> <span class="cf">if</span> <span class="va">__name__</span> <span class="op">==</span> <span class="st">'__main__'</span>:
+<span class="op">---&gt;</span> <span class="dv">68</span>     work()
+
+<span class="op">&lt;</span>ipython<span class="op">-</span><span class="bu">input</span><span class="dv">-3</span><span class="op">-</span>c2d43235dcae<span class="op">&gt;</span> <span class="op">in</span> wrapper(<span class="op">*</span>args, <span class="op">**</span>kwargs)
+     <span class="dv">43</span>             ex_type, ex_value, tb_str <span class="op">=</span> error
+     <span class="dv">44</span>             message <span class="op">=</span> <span class="st">'</span><span class="sc">%s</span><span class="st"> (in subprocess)</span><span class="ch">\n</span><span class="sc">%s</span><span class="st">'</span> <span class="op">%</span> (ex_value.message, tb_str)
+<span class="op">---&gt;</span> <span class="dv">45</span>             <span class="cf">raise</span> ex_type(message)
+     <span class="dv">46</span>
+     <span class="dv">47</span>         <span class="cf">return</span> ret
+
+<span class="pp">ValueError</span>: operands could <span class="op">not</span> be broadcast together <span class="cf">with</span> shapes (<span class="dv">10</span>,<span class="dv">2</span>) (<span class="dv">10</span>,<span class="dv">20</span>)  (<span class="op">in</span> subprocess)
+  File <span class="st">&quot;&lt;ipython-input-3-c2d43235dcae&gt;&quot;</span>, line <span class="dv">18</span>, <span class="op">in</span> process_func
+    ret <span class="op">=</span> func(<span class="op">*</span>args, <span class="op">**</span>kwargs)
+  File <span class="st">&quot;&lt;ipython-input-3-c2d43235dcae&gt;&quot;</span>, line <span class="dv">55</span>, <span class="op">in</span> work
+    np.random.rand(<span class="dv">10</span>,<span class="dv">2</span>) <span class="op">+</span> np.random.rand(<span class="dv">10</span>,<span class="dv">20</span>)</code></pre></div>
+<p>which is quite helpful.</p>
+<h2 id="an-alternative-implementation">An alternative implementation</h2>
+<p>If the Python library <a href="https://pythonhosted.org/joblib/"><code>joblib</code></a> is available, the implementation of the <code>processify</code> decorator can be slightly simplified using the <code>Parallel</code> abstraction. Moreover, <code>joblib</code> does a pretty good job in error reporting, which we can then make use of. Below shows the alternative implementation of the decorator that I wrote (note that the function registration trick is still necessary):</p>
+<div class="sourceCode"><pre class="sourceCode python"><code class="sourceCode python"><span class="im">from</span> functools <span class="im">import</span> wraps
+<span class="im">from</span> joblib <span class="im">import</span> Parallel, delayed
+<span class="im">import</span> sys
+
+<span class="kw">def</span> processify(func):
+
+    <span class="kw">def</span> dummy(<span class="op">*</span>args, <span class="op">**</span>kwargs):
+        <span class="cf">return</span> func(<span class="op">*</span>args, <span class="op">**</span>kwargs)
+
+    dummy.<span class="va">__name__</span> <span class="op">=</span> func.<span class="va">__name__</span> <span class="op">+</span> <span class="st">'_dummy'</span>
+    <span class="bu">setattr</span>(sys.modules[<span class="va">__name__</span>], dummy.<span class="va">__name__</span>, dummy)
+
+    <span class="at">@wraps</span>(func)
+    <span class="kw">def</span> wrapper(<span class="op">*</span>args, <span class="op">**</span>kwargs):
+        res <span class="op">=</span> Parallel(n_jobs<span class="op">=</span><span class="dv">1</span>)(delayed(dummy)(<span class="op">*</span>args, <span class="op">**</span>kwargs) <span class="cf">for</span> _ <span class="op">in</span> [<span class="dv">1</span>])[<span class="dv">0</span>]
+        <span class="cf">return</span> res
+
+    <span class="cf">return</span> wrapper</code></pre></div>
+<p>The error traceback is now shown as:</p>
+<div class="sourceCode"><pre class="sourceCode python"><code class="sourceCode python"><span class="op">---------------------------------------------------------------------------</span>
+<span class="pp">ValueError</span>                                Traceback (most recent call last)
+<span class="op">&lt;</span>ipython<span class="op">-</span><span class="bu">input</span><span class="dv">-9</span><span class="op">-</span>665c397ad301<span class="op">&gt;</span> <span class="op">in</span> <span class="op">&lt;</span>module<span class="op">&gt;</span>()
+     <span class="dv">37</span>
+     <span class="dv">38</span> <span class="cf">if</span> <span class="va">__name__</span> <span class="op">==</span> <span class="st">'__main__'</span>:
+<span class="op">---&gt;</span> <span class="dv">39</span>     work()
+
+<span class="op">&lt;</span>ipython<span class="op">-</span><span class="bu">input</span><span class="dv">-9</span><span class="op">-</span>665c397ad301<span class="op">&gt;</span> <span class="op">in</span> wrapper(<span class="op">*</span>args, <span class="op">**</span>kwargs)
+     <span class="dv">14</span>     @wraps(func)
+     <span class="dv">15</span>     <span class="kw">def</span> wrapper(<span class="op">*</span>args, <span class="op">**</span>kwargs):
+<span class="op">---&gt;</span> <span class="dv">16</span>         res <span class="op">=</span> Parallel(n_jobs<span class="op">=</span><span class="dv">1</span>)(delayed(dummy)(<span class="op">*</span>args, <span class="op">**</span>kwargs) <span class="cf">for</span> _ <span class="op">in</span> [<span class="dv">1</span>])[<span class="dv">0</span>]
+     <span class="dv">17</span>         <span class="cf">return</span> res
+     <span class="dv">18</span>
+
+<span class="op">/</span>home<span class="op">/</span>liauys<span class="op">/</span>.virtualenvs<span class="op">/</span>scientific<span class="op">/</span>lib<span class="op">/</span>python2<span class="fl">.7</span><span class="op">/</span>site<span class="op">-</span>packages<span class="op">/</span>joblib<span class="op">/</span>parallel.pyc <span class="op">in</span> <span class="fu">__call__</span>(<span class="va">self</span>, iterable)
+    <span class="dv">651</span>             <span class="va">self</span>._iterating <span class="op">=</span> <span class="va">True</span>
+    <span class="dv">652</span>             <span class="cf">for</span> function, args, kwargs <span class="op">in</span> iterable:
+<span class="op">--&gt;</span> <span class="dv">653</span>                 <span class="va">self</span>.dispatch(function, args, kwargs)
+    <span class="dv">654</span>
+    <span class="dv">655</span>             <span class="cf">if</span> pre_dispatch <span class="op">==</span> <span class="st">&quot;all&quot;</span> <span class="op">or</span> n_jobs <span class="op">==</span> <span class="dv">1</span>:
+
+<span class="op">/</span>home<span class="op">/</span>liauys<span class="op">/</span>.virtualenvs<span class="op">/</span>scientific<span class="op">/</span>lib<span class="op">/</span>python2<span class="fl">.7</span><span class="op">/</span>site<span class="op">-</span>packages<span class="op">/</span>joblib<span class="op">/</span>parallel.pyc <span class="op">in</span> dispatch(<span class="va">self</span>, func, args, kwargs)
+    <span class="dv">398</span>         <span class="st">&quot;&quot;&quot;</span>
+<span class="st">    399         if self._pool is None:</span>
+<span class="st">--&gt; 400             job = ImmediateApply(func, args, kwargs)</span>
+<span class="st">    401             index = len(self._jobs)</span>
+<span class="st">    402             if not _verbosity_filter(index, self.verbose):</span>
+
+<span class="st">/home/liauys/.virtualenvs/scientific/lib/python2.7/site-packages/joblib/parallel.pyc in __init__(self, func, args, kwargs)</span>
+<span class="st">    136         # Don't delay the application, to avoid keeping the input</span>
+<span class="st">    137         # arguments in memory</span>
+<span class="st">--&gt; 138         self.results = func(*args, **kwargs)</span>
+<span class="st">    139</span>
+<span class="st">    140     def get(self):</span>
+
+<span class="st">&lt;ipython-input-9-665c397ad301&gt; in dummy(*args, **kwargs)</span>
+<span class="st">      7</span>
+<span class="st">      8     def dummy(*args, **kwargs):</span>
+<span class="st">----&gt; 9         return func(*args, **kwargs)</span>
+<span class="st">     10</span>
+<span class="st">     11     dummy.__name__ = func.__name__ + '_dummy'</span>
+
+<span class="st">&lt;ipython-input-9-665c397ad301&gt; in work()</span>
+<span class="st">     24     &quot;&quot;&quot;</span>Get things done here<span class="st">&quot;&quot;&quot;</span>
+<span class="st">     25     import numpy as np</span>
+<span class="st">---&gt; 26     np.random.rand(10,2) + np.random.rand(10,20)</span>
+<span class="st">     27     return np.random.rand(10,2)</span>
+<span class="st">     28</span>
+
+<span class="st">ValueError: operands could not be broadcast together with shapes (10,2) (10,20)</span></code></pre></div>
+<p>To my personal flavor, this looks more consistent with the traceback shown when calling regular functions.</p>
+<h2 id="final-notes">Final notes</h2>
 <p>As long as a bulky function is repeatedly called in a coarse-grained manner (i.e. time spent in a single execution of function is dominant in the caller’s loop) and has lightweight input and output, the processifying trick is a sensible technique that can be used to control the memory usage.</p>
 <p>I’ve added this to my standard utility toolbox for quick data analytics projects, and it just saved me a time or two in a recent competition which I’ll probably write about soon.</p>
 <p>No more <code>gc.collect()</code> blindly!</p>
+<div class="footnotes">
+<hr />
+<ol>
+<li id="fn1"><p>This issue seems to have been fixed in Python 3.4: see the <a href="http://bugs.python.org/issue13831Ups">bug tracker</a><a href="#fnref1">↩</a></p></li>
+</ol>
+</div>
 
           </div>
           <div class="footer">
