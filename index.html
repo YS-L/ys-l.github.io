@@ -24,7 +24,7 @@
     <!--[if gt IE 8]><!-->
         <link rel="stylesheet" href="./css/blog.css">
     <!--<![endif]-->
-    <link rel="stylesheet" href="//maxcdn.bootstrapcdn.com/font-awesome/4.3.0/css/font-awesome.min.css">
+    <link rel="stylesheet" href="//maxcdn.bootstrapcdn.com/font-awesome/4.4.0/css/font-awesome.min.css">
     <link rel="stylesheet" href="./css/syntax.css">
     <script>
       if (document.location.hostname.search("ys-l.github.io") !== -1) {
@@ -83,41 +83,317 @@
     <a href="./posts/2015/10/03/processifying-bulky-functions/" class="post-title">Processifying Bulky Functions</a>
     <span class="post-list-meta">October  3, 2015</span>
     <p class="post-description">
+    <!--
     
         <p>Long running Python scripts that repeatedly call “bulky” functions can incur growing memory usage over time. Other than calling <code>gc.collect()</code> and pray hard, can we do a bit better? 
-        <p align="right"><a href="./posts/2015/10/03/processifying-bulky-functions/" class="read-more-link"> Read more <i class="fa fa-chevron-right"></i></a><p>
+        <p align="right"><a href="/posts/2015/10/03/processifying-bulky-functions/index.html" class="read-more-link"> Read more <i class="fa fa-chevron-right"></i></a><p>
     
+    -->
+    <p>Long running Python scripts that repeatedly call “bulky” functions can incur growing memory usage over time. Other than calling <code>gc.collect()</code> and pray hard, can we do a bit better? <!--more--></p>
+<h2 id="the-problem-with-bulky-functions">The problem with bulky functions</h2>
+<p>Some real examples I had faced include scripts that evaluates performance of many different combinations of features and model on a dataset:</p>
+<div class="sourceCode"><pre class="sourceCode python"><code class="sourceCode python"><span class="kw">def</span> evaluate(features, model):
+    <span class="co"># Load some big features</span>
+    <span class="co"># Train a big model</span>
+    <span class="co"># Measure the performance</span>
+    <span class="co"># After all the bulky work, return a number or a small dict, etc.</span>
+    <span class="cf">return</span> score</code></pre></div>
+<p>In a single Python script, repeatedly calling the above bulky function can cause the memory usage to grow over time, even though every calls are really independent of each other. That is to say, some amount of lingering memory will accumulate after every call the the function, as if there is an on-going memory leak. This continues until one has to restart the script to trigger a “refresh” to free up the memory.</p>
+<h2 id="possible-solutions">Possible solutions</h2>
+<h4 id="find-out-where-the-memory-leak-is-with-a-profiler">0. Find out where the memory leak is with a profiler</h4>
+<p>This is probably the only real solution to the problem. However, the effort needed might be too much for exploratory code that will not go into production. Sometimes, something more pragmatic is needed.</p>
+<h4 id="gc.collect">1. <code>gc.collect()</code></h4>
+<p>This attempts to force the garbage collector to do its work. Often preceded by some <code>del ...</code> statements. Unfortunately, there is no guarantee that the memory will be released.</p>
+<h4 id="invoke-each-execution-of-evaluate-in-a-new-process-e.g.with-a-driver-shell-script">2. Invoke each execution of <code>evaluate()</code> in a new process, e.g. with a “driver” shell script</h4>
+<p>Now we are getting somewhere. The OS will be forced to clean up the memory incurred by the function, when the process terminates. However, this requires a lot of extra boilerplate code to be written – a command line interface and a shell script. Besides the annoying context switching of the mind between languages, more importantly this approach is only feasible for simple “end-user” function such as the one shown in this example. Generally, for a bulky function that needs to be called periodically within another function, we need to stay within the Python interpreter.</p>
+<h4 id="spawn-a-new-process-in-python-that-will-execute-the-function">3. Spawn a new process in Python that will execute the function</h4>
+<p>Indeed, we can spawn a new process to execute the function using the <code>multiprocessing</code> module. This requires modification to the <code>evaluate()</code> function so that it takes in a <code>Queue</code> object for communicating back the result. Perhaps more preferably, we can make use of the <code>Pool</code> interface to help with the result communication:</p>
+<div class="sourceCode"><pre class="sourceCode python"><code class="sourceCode python"><span class="im">from</span> multiprocessing <span class="im">import</span> Pool
+pool <span class="op">=</span> Pool(processes<span class="op">=</span><span class="dv">1</span>)
+result <span class="op">=</span> pool.<span class="bu">apply</span>(evaluate, features, model)</code></pre></div>
+<p>Looks acceptable. However, what if an exception is raised somewhere in the function? The error traceback now becomes</p>
+<div class="sourceCode"><pre class="sourceCode python"><code class="sourceCode python"><span class="op">/</span>usr<span class="op">/</span>lib64<span class="op">/</span>python2<span class="fl">.7</span><span class="op">/</span>multiprocessing<span class="op">/</span>pool.pyc <span class="op">in</span> <span class="bu">apply</span>(<span class="va">self</span>, func, args, kwds)
+    <span class="dv">242</span>         <span class="st">'''</span>
+<span class="st">    243         assert self._state == RUN</span>
+<span class="st">--&gt; 244         return self.apply_async(func, args, kwds).get()</span>
+<span class="st">    245</span>
+<span class="st">    246     def map(self, func, iterable, chunksize=None):</span>
+
+<span class="st">/usr/lib64/python2.7/multiprocessing/pool.pyc in get(self, timeout)</span>
+<span class="st">    565             return self._value</span>
+<span class="st">    566         else:</span>
+<span class="st">--&gt; 567             raise self._value</span>
+<span class="st">    568</span>
+<span class="st">    569     def _set(self, i, obj):</span>
+
+<span class="st">ValueError: operands could not be broadcast together with shapes (10,2) (10,20)</span></code></pre></div>
+<p>regardless of where the exception is actually raised. As one can guess, staring at the source code of the multiprocessing module is not particularly informative for debugging an error in the user level code<a href="#fn1" class="footnoteRef" id="fnref1"><sup>1</sup></a>. Some further hacking is necessary to float the actual context up to the user on exception. Also, having to interact with the <code>Pool</code> object every time is kind of distracting. In other words, this solution is close but not yet ideal.</p>
+<h2 id="the-processify-decorator">The <code>processify</code> decorator</h2>
+<p>Recently, I found a neat piece of code in the wild that solves this problem – the <code>processify</code> decorator. Full credit goes to <a href="https://gist.github.com/schlamar/2311116">schlamar</a> who posted it on GitHub Gist.</p>
+<p>To use it, simply decorate the bulky function:</p>
+<div class="sourceCode"><pre class="sourceCode python"><code class="sourceCode python"><span class="at">@processify</span>
+<span class="kw">def</span> evaluate(features, model):
+    <span class="co"># Load some big features</span>
+    <span class="co"># Train a big model</span>
+    <span class="co"># Measure the performance</span>
+    <span class="co"># After all the bulky work, return a number or a small dict, etc.</span>
+    <span class="cf">return</span> score</code></pre></div>
+<p>and the function will be run cleanly in a new process, as long as the input and output of the function are picklable.</p>
+<p>Very nice! What I like about it is:</p>
+<ol style="list-style-type: decimal">
+<li>Very easy to use, no modification to the original function required (in fact, this is probably a perfect use case of a decorator)</li>
+<li>A trick that seems to successfully pickle nested function</li>
+<li>Able to show some useful context on exception as opposed to the case above using <code>Pool</code>.</li>
+</ol>
+<p>Regarding point (3) above, consider the following code:</p>
+<div class="sourceCode"><pre class="sourceCode python"><code class="sourceCode python"><span class="at">@processify</span>
+<span class="kw">def</span> work():
+    <span class="co">&quot;&quot;&quot;Get things done here&quot;&quot;&quot;</span>
+    <span class="im">import</span> numpy <span class="im">as</span> np
+    np.random.rand(<span class="dv">10</span>,<span class="dv">2</span>) <span class="op">+</span> np.random.rand(<span class="dv">10</span>,<span class="dv">20</span>)
+    <span class="cf">return</span> np.random.rand(<span class="dv">10</span>,<span class="dv">2</span>)
+
+<span class="cf">if</span> <span class="va">__name__</span> <span class="op">==</span> <span class="st">'__main__'</span>:
+    work()</code></pre></div>
+<p>The error traceback is shown as:</p>
+<div class="sourceCode"><pre class="sourceCode python"><code class="sourceCode python"><span class="op">---------------------------------------------------------------------------</span>
+<span class="pp">ValueError</span>                                Traceback (most recent call last)
+<span class="op">&lt;</span>ipython<span class="op">-</span><span class="bu">input</span><span class="dv">-3</span><span class="op">-</span>c2d43235dcae<span class="op">&gt;</span> <span class="op">in</span> <span class="op">&lt;</span>module<span class="op">&gt;</span>()
+     <span class="dv">66</span>
+     <span class="dv">67</span> <span class="cf">if</span> <span class="va">__name__</span> <span class="op">==</span> <span class="st">'__main__'</span>:
+<span class="op">---&gt;</span> <span class="dv">68</span>     work()
+
+<span class="op">&lt;</span>ipython<span class="op">-</span><span class="bu">input</span><span class="dv">-3</span><span class="op">-</span>c2d43235dcae<span class="op">&gt;</span> <span class="op">in</span> wrapper(<span class="op">*</span>args, <span class="op">**</span>kwargs)
+     <span class="dv">43</span>             ex_type, ex_value, tb_str <span class="op">=</span> error
+     <span class="dv">44</span>             message <span class="op">=</span> <span class="st">'</span><span class="sc">%s</span><span class="st"> (in subprocess)</span><span class="ch">\n</span><span class="sc">%s</span><span class="st">'</span> <span class="op">%</span> (ex_value.message, tb_str)
+<span class="op">---&gt;</span> <span class="dv">45</span>             <span class="cf">raise</span> ex_type(message)
+     <span class="dv">46</span>
+     <span class="dv">47</span>         <span class="cf">return</span> ret
+
+<span class="pp">ValueError</span>: operands could <span class="op">not</span> be broadcast together <span class="cf">with</span> shapes (<span class="dv">10</span>,<span class="dv">2</span>) (<span class="dv">10</span>,<span class="dv">20</span>)  (<span class="op">in</span> subprocess)
+  File <span class="st">&quot;&lt;ipython-input-3-c2d43235dcae&gt;&quot;</span>, line <span class="dv">18</span>, <span class="op">in</span> process_func
+    ret <span class="op">=</span> func(<span class="op">*</span>args, <span class="op">**</span>kwargs)
+  File <span class="st">&quot;&lt;ipython-input-3-c2d43235dcae&gt;&quot;</span>, line <span class="dv">55</span>, <span class="op">in</span> work
+    np.random.rand(<span class="dv">10</span>,<span class="dv">2</span>) <span class="op">+</span> np.random.rand(<span class="dv">10</span>,<span class="dv">20</span>)</code></pre></div>
+<p>which is quite helpful.</p>
+<p>As long as a bulky function is repeatedly called in a coarse-grained manner (i.e. time spent in a single execution of function is dominant in the caller’s loop) and has lightweight input and output, the processifying trick is a sensible technique that can be used to control the memory usage.</p>
+<p>I’ve added this to my standard utility toolbox for quick data analytics projects, and it just saved me a time or two in a recent competition which I’ll probably write about soon.</p>
+<p>No more <code>gc.collect()</code> blindly!</p>
+<div class="footnotes">
+<hr />
+<ol>
+<li id="fn1"><p>This issue seems to have been fixed in Python 3.4: see the <a href="http://bugs.python.org/issue13831Ups">bug tracker</a><a href="#fnref1">↩</a></p></li>
+</ol>
+</div>
     </p>
+  </div>
+  <div class="post-separator">
+    <i class="fa fa-gg"></i>
   </div>
 
   <div class="post-list-snippet">
     <a href="./posts/2015/08/28/how-not-to-use-pandas-apply/" class="post-title">How Not to Use pandas' "apply"</a>
     <span class="post-list-meta">August 28, 2015</span>
     <p class="post-description">
+    <!--
     
         <p>Recently, I tripped over a use of the <code>apply</code> function in pandas in perhaps one of worst possible ways. The scenario is this: we have a DataFrame of a moderate size, say 1 million rows and a dozen columns. We want to perform some row-wise computation on the DataFrame and based on which generate a few new columns. 
-        <p align="right"><a href="./posts/2015/08/28/how-not-to-use-pandas-apply/" class="read-more-link"> Read more <i class="fa fa-chevron-right"></i></a><p>
+        <p align="right"><a href="/posts/2015/08/28/how-not-to-use-pandas-apply/index.html" class="read-more-link"> Read more <i class="fa fa-chevron-right"></i></a><p>
     
+    -->
+    <p>Recently, I tripped over a use of the <code>apply</code> function in pandas in perhaps one of worst possible ways. The scenario is this: we have a DataFrame of a moderate size, say 1 million rows and a dozen columns. We want to perform some row-wise computation on the DataFrame and based on which generate a few new columns. <!--more--></p>
+<p>Let’s also assume that the computation is rather complex, so those wonderful vectorized operations in that comes with pandas are out of question (the official <a href="http://pandas.pydata.org/pandas-docs/stable/enhancingperf.html">performance enhancement tips</a> is a nice read on this). And luckily it has been packaged as a function that returns a few values:</p>
+<div class="sourceCode"><pre class="sourceCode python"><code class="sourceCode python"><span class="kw">def</span> complex_computation(a):
+    <span class="co"># do lots of work here...</span>
+    <span class="co"># ...</span>
+    <span class="co"># and finally it's done.</span>
+    <span class="cf">return</span> value1, value2, value3</code></pre></div>
+<p>We want to put the computed results together into a new DataFrame.</p>
+<p>A natural solution is to call the <code>apply</code> function of the DataFrame and pass in a function which does the said computation:</p>
+<div class="sourceCode"><pre class="sourceCode python"><code class="sourceCode python"><span class="kw">def</span> func(row):
+    v1, v2, v3 <span class="op">=</span> complex_computation(row[[<span class="st">'some'</span>, <span class="st">'columns'</span>]].values)
+    <span class="cf">return</span> pd.Series({<span class="st">'NewColumn1'</span>: v1,
+                      <span class="st">'NewColumn2'</span>: v2,
+                      <span class="co">'NewColumn3'</span>: v3})
+df_result <span class="op">=</span> df.<span class="bu">apply</span>(func, axis<span class="op">=</span><span class="dv">1</span>)</code></pre></div>
+<p>According to the <a href="http://pandas.pydata.org/pandas-docs/stable/generated/pandas.DataFrame.apply.html">documentation</a> of <code>apply</code>, the result depends on what <code>func</code> returns. If we pass in such a <code>func</code> (returning a Series instead of a single value), the result would be a nice DataFrame containing three columns as named.</p>
+<p>Expressed in a more loopy manner, the following yields an equivalent result:</p>
+<div class="sourceCode"><pre class="sourceCode python"><code class="sourceCode python">v1s, v2s, v3s <span class="op">=</span> [], [], []
+<span class="cf">for</span> _, row <span class="op">in</span> df.iterrows():
+    v1, v2, v3 <span class="op">=</span> complex_computation(row[[<span class="st">'some'</span>, <span class="st">'columns'</span>]].values)
+    v1s.append(v1)
+    v2s.append(v2)
+    v3s.append(v3)
+df_result <span class="op">=</span> pd.DataFrame({<span class="st">'NewColumn1'</span>: v1s,
+                          <span class="st">'NewColumn2'</span>: v2s,
+                          <span class="co">'NewColumn3'</span>: v3s})</code></pre></div>
+<p>However, at the first glance, the loopy version just does not seem elegant compared to the <code>apply</code> version. Plus, leaving the work of putting together the results to pandas seems to be a good idea – could some magics be performed in the background by pandas, making the loop complete faster?</p>
+<p>That was what I thought, but it turns out we have just constructed a silent memory eating monster with such use of <code>apply</code>. To see that, let’s put together the above pieces of code and consider a minimal reproducible example (and the pandas version here is <code>0.16.2</code>):</p>
+<div class="sourceCode"><pre class="sourceCode python"><code class="sourceCode python"><span class="im">import</span> pandas <span class="im">as</span> pd
+<span class="im">import</span> numpy <span class="im">as</span> np
+<span class="op">%</span>load_ext memory_profiler
+
+<span class="kw">def</span> complex_computation(a):
+    <span class="co"># Okay, this is not really complex, but this is just for illustration.</span>
+    <span class="co"># To keep reproducibility, we can't make it order a pizza here.</span>
+    <span class="co"># Anyway, pretend that there is no way to vectorize this operation.</span>
+    <span class="cf">return</span> a[<span class="dv">0</span>]<span class="op">-</span>a[<span class="dv">1</span>], a[<span class="dv">0</span>]<span class="op">+</span>a[<span class="dv">1</span>], a[<span class="dv">0</span>]<span class="op">*</span>a[<span class="dv">1</span>]
+
+<span class="kw">def</span> func(row):
+    v1, v2, v3 <span class="op">=</span> complex_computation(row.values)
+    <span class="cf">return</span> pd.Series({<span class="st">'NewColumn1'</span>: v1,
+                      <span class="st">'NewColumn2'</span>: v2,
+                      <span class="co">'NewColumn3'</span>: v3})
+
+<span class="kw">def</span> run_apply(df):
+    df_result <span class="op">=</span> df.<span class="bu">apply</span>(func, axis<span class="op">=</span><span class="dv">1</span>)
+    <span class="cf">return</span> df_result
+
+<span class="kw">def</span> run_loopy(df):
+    v1s, v2s, v3s <span class="op">=</span> [], [], []
+    <span class="cf">for</span> _, row <span class="op">in</span> df.iterrows():
+        v1, v2, v3 <span class="op">=</span> complex_computation(row.values)
+        v1s.append(v1)
+        v2s.append(v2)
+        v3s.append(v3)
+    df_result <span class="op">=</span> pd.DataFrame({<span class="st">'NewColumn1'</span>: v1s,
+                              <span class="st">'NewColumn2'</span>: v2s,
+                              <span class="co">'NewColumn3'</span>: v3s})
+    <span class="cf">return</span> df_result
+
+<span class="kw">def</span> make_dataset(N):
+    np.random.seed(<span class="dv">0</span>)
+    df <span class="op">=</span> pd.DataFrame({
+            <span class="st">'a'</span>: np.random.randint(<span class="dv">0</span>, <span class="dv">100</span>, N),
+            <span class="st">'b'</span>: np.random.randint(<span class="dv">0</span>, <span class="dv">100</span>, N)
+         })
+    <span class="cf">return</span> df
+
+<span class="kw">def</span> test():
+    <span class="im">from</span> pandas.util.testing <span class="im">import</span> assert_frame_equal
+    df <span class="op">=</span> make_dataset(<span class="dv">100</span>)
+    df_res1 <span class="op">=</span> run_loopy(df)
+    df_res2 <span class="op">=</span> run_apply(df)
+    assert_frame_equal(df_res1, df_res2)
+    <span class="bu">print</span> <span class="st">'OK'</span>
+
+df <span class="op">=</span> make_dataset(<span class="dv">1000000</span>)  </code></pre></div>
+<p>Before anything else, let’s check the correctness first on a small set of input data (i.e. both implementations yield identical results):</p>
+<div class="sourceCode"><pre class="sourceCode python"><code class="sourceCode python">test()
+<span class="co"># OK</span></code></pre></div>
+<p>And now it’s time for some <code>%memit</code>. The loopy version gives:</p>
+<div class="sourceCode"><pre class="sourceCode python"><code class="sourceCode python"><span class="op">%</span>memit run_loopy(df)
+<span class="co"># peak memory: 272.18 MiB, increment: 181.38 MiB</span></code></pre></div>
+<p>How about the elegant <code>apply</code>?</p>
+<div class="sourceCode"><pre class="sourceCode python"><code class="sourceCode python"><span class="op">%</span>memit run_apply(df)
+<span class="co"># peak memory: 3941.29 MiB, increment: 3850.10 MiB</span></code></pre></div>
+<p>Oops, that’s a 10 times more in memory usage! Not good. Apparently, in order to achieve its flexibility, the <code>apply</code> function somehow has to store all the intermediate <code>Series</code> that appeared along the way, or something like that.</p>
+<p>Speed-wise we have:</p>
+<div class="sourceCode"><pre class="sourceCode python"><code class="sourceCode python"><span class="op">%</span>timeit run_loopy(df)
+<span class="co"># 1 loops, best of 3: 36.2 s per loop</span>
+
+<span class="op">%</span>timeit run_apply(df)
+<span class="co"># 1 loops, best of 3: 2min 48s per loop</span></code></pre></div>
+<p>Looping is slow; but it is actually a lot faster than this way of using <code>apply</code>! The overhead of creating a Series for every input row is just too much.</p>
+<p>Combining both its memory and time inefficiency, I have just presented to you one of the worst possible ways to use the <code>apply</code> function in pandas. For some reason, this did not appear obvious to me when I first encountered it.</p>
+<p><strong>TL;DR</strong>: When applying a function on a DataFrame using <code>DataFrame.apply</code> by row, be careful of what the function returns – making it return a <code>Series</code> so that <code>apply</code> results in a DataFrame can be very memory inefficient on input with many rows. And it is slow. Very slow.</p>
     </p>
+  </div>
+  <div class="post-separator">
+    <i class="fa fa-gg"></i>
   </div>
 
   <div class="post-list-snippet">
     <a href="./posts/2015/06/11/kaggle-human-or-robot-challenge/" class="post-title">Kaggle Human or Robot Challenge</a>
     <span class="post-list-meta">June 11, 2015</span>
     <p class="post-description">
+    <!--
     
         <p>This is a brief write-up on my approach in a recent interesting Kaggle <a href="https://www.kaggle.com/c/facebook-recruiting-iv-human-or-bot">competition</a> hosted by Facebook. In a nutshell, we are given some data describing user level bidding behaviours in an online penny auction website (I didn’t know there exists such a thing!). The goal is to come up with a predictive model that can distinguish between real human bidders and automated robot bidders. 
-        <p align="right"><a href="./posts/2015/06/11/kaggle-human-or-robot-challenge/" class="read-more-link"> Read more <i class="fa fa-chevron-right"></i></a><p>
+        <p align="right"><a href="/posts/2015/06/11/kaggle-human-or-robot-challenge/index.html" class="read-more-link"> Read more <i class="fa fa-chevron-right"></i></a><p>
     
+    -->
+    <p>This is a brief write-up on my approach in a recent interesting Kaggle <a href="https://www.kaggle.com/c/facebook-recruiting-iv-human-or-bot">competition</a> hosted by Facebook. In a nutshell, we are given some data describing user level bidding behaviours in an online penny auction website (I didn’t know there exists such a thing!). The goal is to come up with a predictive model that can distinguish between real human bidders and automated robot bidders. <!--more--></p>
+<h2 id="data-exploration">Data Exploration</h2>
+<p>A quick look at the data by plotting the sorted timestamps of the bidding activities shows that there are three distinct “periods” in the dataset.</p>
+<p>A quick <code>value_counts()</code> on each column in the dataset very roughly shows how much information is contained in the dataset:</p>
+<pre><code>bid_id         7656334
+bidder_id         6614
+auction          15051
+merchandise         10
+device            7351
+time            776529
+country            199
+ip             2303991
+url            1786351</code></pre>
+<p>Another interesting observation is about the <code>address</code> and <code>payment_account</code> given as meta-data associated with each bidder. Although the 37-character hashes do look like <code>MD5</code>, their distributions are clearly not completely random. For example, 52.3% of the bidders have their address hashes prefixed by <code>a3d2de7675556553a5f08e4c88d2c228</code>; 18.6% of the bidders have their account hashes prefixed by the same magic hash. This artifact did contribute slightly in the final performance of my model, as will be described in the next section shortly.</p>
+<h2 id="feature-engineering">Feature Engineering</h2>
+<p>The following lists the features I found useful and included in my model. Obviously, each of these features are extracted for every bidder.</p>
+<p>The first set of features makes use of the categorical information contained in the data, such as country, url, ip and device:</p>
+<ul>
+<li><p><strong>Basic counts</strong>: Counts of unique auction, device, country, ip and url</p></li>
+<li><p><strong>Basic counts by auction</strong>: Same as above, but do the counting within each auction and extract the resulting statistics (mean, median, std)</p></li>
+<li><p><strong>Shared device</strong>: Some devices are shared by multiple bidders. This feature counts the number of bids that use such shared device. Repeat the counting for each auction and extract the statistics.</p></li>
+<li><p><strong>Country based</strong>: One-hot encode the most frequently occurring (top 10%) countries in the dataset. Extract the number of bids associated with these countries.</p></li>
+<li><p><strong>URL based</strong>: Number of bids having the URL <code>vasstdc27m7nks3</code> or other URLs (i.e. similar to one-hot encoding with only two dimensions).</p></li>
+<li><p><strong>IP based</strong>: One-hot encode the most frequently occurring IP addresses (top 20) in the dataset. Extract the number of bids associated with these IPs.</p></li>
+<li><p><strong>Device based</strong>: One-hot encode the most frequently occurring devices (top 40) in the dataset. Extract the number of bids associated with these devices.</p></li>
+</ul>
+<p>The second set of features is derived mainly from time information:</p>
+<ul>
+<li><p><strong>Period based</strong>: Number of bids in each of the three “periods”</p></li>
+<li><p><strong>Biding (inverse) frequency</strong>: Statistics of the time differences between bids (mean, std)</p></li>
+<li><p><strong>Reaction time</strong>: Statistics of the time lapsed from the last bid within each auction</p></li>
+<li><p><strong>Auction switch</strong>: Number of switch between different auctions, when bidding activities are sorted chronologically</p></li>
+<li><p><strong>Bid timimg</strong>: Define “bid timing” as the chronological order of a bid in an auction or a period normalized to [0, 1]. For example, the very first bid in each auction has a bid timing of 0. The resulting features are obtained by computing the statistics of bid timing for each auction, as well as for each “period”.</p></li>
+<li><p><strong>First bid</strong>: Statistics bid timing of the first bid within each auction. Interestingly, its counterpart “Last Bid” feature is not useful, probably because for many auctions, we don’t even know whether it has already ended.</p></li>
+</ul>
+<p>And finally, the mysterious meta-data information:</p>
+<ul>
+<li><strong>Address hash prefix</strong>: One-hot encode the address hash prefix (of length 32) into two categories: <code>a3d2de7675556553a5f08e4c88d2c228</code> and others.</li>
+</ul>
+<p>Combining the above feature sets yields a feature dimension of about 180.</p>
+<h2 id="modeling">Modeling</h2>
+<p>I use the extra-trees classifier (implemented as <code>ExtraTreesClassifier</code> from the <code>scikit-learn</code> library) as the modeling algorithm. It turns out to yield the best local validation score among the other go-to methods, such as random forests and gradient boosted trees. Due to the way the labels are assigned in this dataset, they are believed to be rather noisy. This perhaps explains why the more powerful gradient boosted trees does not generalize as well as the extra-trees classifier. I have seen this method giving good results in another dataset, which also contains noisy labels.</p>
+<p>The final model is a simple average of multiple models trained using different random seeds.</p>
+<h2 id="evaluation-pipeline">Evaluation Pipeline</h2>
+<p>Normally, I use a 5-fold cross validation to evaluate changes in the model pipeline. For this dataset, I feel the need to level it up by repeating it 20 times, yielding a total of 100 different folds. Luckily, due to the small size of the dataset, the processing time is still very much tolerable. I look at both the mean and standard deviation of the cross-validated AUC score to decide whether each change in features or parameters is helpful, optimizing for the most stable result when improvement is infinitesimal.</p>
+<p>The leader board score is indeed not very helpful, due to the small sample size.</p>
+<h2 id="things-that-did-not-help">Things that Did Not Help</h2>
+<p>As usual, many things don’t work. Some of which that I still remember are:</p>
+<ul>
+<li><p>Interaction between categorical features (e.g. the use of two particular devices, occurrences of two particular countries)</p></li>
+<li><p>Fancy blending by optimizing weights between different models (for this I also trained other models such as neural network, k-NN and linear models that did not work as well individually)</p></li>
+<li><p>The merchandise field. Tried multiple ways to derive features from this information but none is actually useful.</p></li>
+</ul>
+<h2 id="ending-notes">Ending Notes</h2>
+<p>There are some interesting ideas that other people have used, which I have not thought of:</p>
+<ul>
+<li><p>Further decoding of time unit to extract time-window based features that make sense</p></li>
+<li><p>Treating bidding activities as text and borrow ideas from text classification methods</p></li>
+<li><p>SMOTE-based re-sampling technique to address the class imbalance issue</p></li>
+</ul>
+<p>My final ranking jumped up a bit when the private leader board is revealed, to the 11th place. Not too bad, since near the end of competition I was just hoping to stay within the top 10%. Hats off to the top participants, especially the winner who dominated everyone with just 3 submissions. Very impressive!</p>
     </p>
+  </div>
+  <div class="post-separator">
+    <i class="fa fa-gg"></i>
   </div>
 
   <div class="post-list-snippet">
     <a href="./posts/2014/07/29/hello-world/" class="post-title">Hello World</a>
     <span class="post-list-meta">July 29, 2014</span>
     <p class="post-description">
+    <!--
     
+    -->
+    <p>I think it’s good to have a blog where I can share stuffs that I find interesting or useful, silly projects that have kept me busy in my free time, and other things like that.</p>
+<p>I’m doing it with Hakyll in order to make a good excuse for learning more about Haskell. Another excuse of this sort was xmonad – the tiling window manager written in Haskell, which makes me happily forget what a desktop is. There is really no going back!</p>
+<p>So here it is, although there’s nothing here yet in the meantime, enjoy!</p>
     </p>
+  </div>
+  <div class="post-separator">
+    <i class="fa fa-gg"></i>
   </div>
 
 
