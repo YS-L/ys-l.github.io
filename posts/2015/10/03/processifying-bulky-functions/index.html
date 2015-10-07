@@ -80,14 +80,14 @@
 
  <p>Long running Python scripts that repeatedly call “bulky” functions can incur growing memory usage over time. Other than calling <code>gc.collect()</code> and pray hard, can we do a bit better? <!--more--></p>
 <h2 id="the-problem-with-bulky-functions">The problem with bulky functions</h2>
-<p>Some real examples I had faced include scripts that evaluates performance of many different combinations of features and model on a dataset:</p>
+<p>Some real examples I had faced include scripts that evaluate performance of many different combinations of features and model on a dataset:</p>
 <div class="sourceCode"><pre class="sourceCode python"><code class="sourceCode python"><span class="kw">def</span> evaluate(features, model):
     <span class="co"># Load some big features</span>
     <span class="co"># Train a big model</span>
     <span class="co"># Measure the performance</span>
     <span class="co"># After all the bulky work, return a number or a small dict, etc.</span>
     <span class="cf">return</span> score</code></pre></div>
-<p>In a single Python script, repeatedly calling the above bulky function can cause the memory usage to grow over time, even though every calls are really independent of each other. That is to say, some amount of lingering memory will accumulate after every call the the function, as if there is an on-going memory leak. This continues until one has to restart the script to trigger a “refresh” to free up the memory.</p>
+<p>In a single Python script, repeatedly calling the above bulky function can cause the memory usage to grow over time, even though the calls are really independent of each other. That is to say, some amount of lingering memory will accumulate after every call to the function, as if there is an on-going memory leak. This continues until one has to restart the script to trigger a “refresh” to free up the memory.</p>
 <h2 id="possible-solutions">Possible solutions</h2>
 <h4 id="find-out-where-the-memory-leak-is-with-a-profiler">0. Find out where the memory leak is with a profiler</h4>
 <p>This is probably the only real solution to the problem. However, the effort needed might be too much for exploratory code that will not go into production. Sometimes, something more pragmatic is needed.</p>
