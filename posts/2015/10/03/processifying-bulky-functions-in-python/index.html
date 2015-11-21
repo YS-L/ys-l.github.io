@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <!--<meta name="description" content="A layout example that shows off a blog page with a list of posts."> -->
-    <title>YS-L - Processifying Bulky Functions</title>
+    <title>YS-L - Processifying Bulky Functions in Python</title>
     <link rel="stylesheet" href="//cdn.jsdelivr.net/g/pure@0.6.0(pure-min.css+grids-responsive-min.css)">
     <!--
     <link rel="stylesheet" href="http://yui.yahooapis.com/pure/0.5.0/pure-min.css">
@@ -50,11 +50,9 @@
               <li class="nav-item">
                 <a class="pure-button" href="../../../../../">Home</a>
               </li>
-              <!--
               <li class="nav-item">
-                <a class="pure-button" href="/all">Posts</a>
+                <a class="pure-button" href="../../../../../archive">Archive</a>
               </li>
-              -->
               <li class="nav-item">
                 <a class="pure-button" href="../../../../../about">About</a>
               </li>
@@ -69,7 +67,7 @@
 
       <div class="pure-u-1">
           <div class="content">
-          <p class="post-title">Processifying Bulky Functions</p>
+          <p class="page-title">Processifying Bulky Functions in Python</p>
           <div class="post-description">
             <!-- A single blog post -->
 <header class="post-header">
@@ -78,7 +76,7 @@
   </p>
 </header>
 
- <p>Long running Python scripts that repeatedly call “bulky” functions can incur growing memory usage over time. Other than calling <code>gc.collect()</code> and pray hard, can we do a bit better? <!--more--></p>
+ <p>Long running Python scripts that repeatedly call “bulky” functions can incur growing memory usage over time. Other than calling <code>gc.collect()</code> and pray hard, can we do a bit better in dealing with the heavy memory footprint? <!--more--></p>
 <h2 id="the-problem-with-bulky-functions">The problem with bulky functions</h2>
 <p>Some real examples I had faced include scripts that evaluate performance of many different combinations of features and model on a dataset:</p>
 <div class="sourceCode"><pre class="sourceCode python"><code class="sourceCode python"><span class="kw">def</span> evaluate(features, model):
@@ -118,7 +116,54 @@ result <span class="op">=</span> pool.<span class="bu">apply</span>(evaluate, fe
 <span class="st">ValueError: operands could not be broadcast together with shapes (10,2) (10,20)</span></code></pre></div>
 <p>regardless of where the exception is actually raised. As one can guess, staring at the source code of the multiprocessing module is not particularly informative for debugging an error in the user level code<a href="#fn1" class="footnoteRef" id="fnref1"><sup>1</sup></a>. Some further hacking is necessary to float the actual context up to the user on exception. Also, having to interact with the <code>Pool</code> object every time is kind of distracting. In other words, this solution is close but not yet ideal.</p>
 <h2 id="the-processify-decorator">The <code>processify</code> decorator</h2>
-<p>Recently, I found a neat piece of code in the wild that solves this problem – the <code>processify</code> decorator. Full credit goes to <a href="https://gist.github.com/schlamar/2311116">schlamar</a> who posted it on GitHub Gist.</p>
+<p>Recently, I found a neat piece of code in the wild that solves this problem – the <code>processify</code> decorator. Full credit goes to <a href="https://gist.github.com/schlamar/2311116">schlamar</a> who posted it on GitHub Gist. For completeness, I will show the (slightly modified) code here:</p>
+<div class="sourceCode"><pre class="sourceCode python"><code class="sourceCode python"><span class="im">import</span> os
+<span class="im">import</span> sys
+<span class="im">import</span> traceback
+<span class="im">from</span> functools <span class="im">import</span> wraps
+<span class="im">from</span> multiprocessing <span class="im">import</span> Process, Queue
+
+
+<span class="kw">def</span> processify(func):
+    <span class="co">'''Decorator to run a function as a process.</span>
+<span class="co">    Be sure that every argument and the return value</span>
+<span class="co">    is *pickable*.</span>
+<span class="co">    The created process is joined, so the code does not</span>
+<span class="co">    run in parallel.</span>
+<span class="co">    '''</span>
+
+    <span class="kw">def</span> process_func(q, <span class="op">*</span>args, <span class="op">**</span>kwargs):
+        <span class="cf">try</span>:
+            ret <span class="op">=</span> func(<span class="op">*</span>args, <span class="op">**</span>kwargs)
+        <span class="cf">except</span> <span class="pp">Exception</span>:
+            ex_type, ex_value, tb <span class="op">=</span> sys.exc_info()
+            error <span class="op">=</span> ex_type, ex_value, <span class="st">''</span>.join(traceback.format_tb(tb))
+            ret <span class="op">=</span> <span class="va">None</span>
+        <span class="cf">else</span>:
+            error <span class="op">=</span> <span class="va">None</span>
+
+        q.put((ret, error))
+
+    <span class="co"># register original function with different name</span>
+    <span class="co"># in sys.modules so it is pickable</span>
+    process_func.<span class="va">__name__</span> <span class="op">=</span> func.<span class="va">__name__</span> <span class="op">+</span> <span class="st">'processify_func'</span>
+    <span class="bu">setattr</span>(sys.modules[<span class="va">__name__</span>], process_func.<span class="va">__name__</span>, process_func)
+
+    <span class="at">@wraps</span>(func)
+    <span class="kw">def</span> wrapper(<span class="op">*</span>args, <span class="op">**</span>kwargs):
+        q <span class="op">=</span> Queue()
+        p <span class="op">=</span> Process(target<span class="op">=</span>process_func, args<span class="op">=</span>[q] <span class="op">+</span> <span class="bu">list</span>(args), kwargs<span class="op">=</span>kwargs)
+        p.start()
+        ret, error <span class="op">=</span> q.get()
+
+        <span class="cf">if</span> error:
+            ex_type, ex_value, tb_str <span class="op">=</span> error
+            message <span class="op">=</span> <span class="st">'</span><span class="sc">%s</span><span class="st"> (in subprocess)</span><span class="ch">\n</span><span class="sc">%s</span><span class="st">'</span> <span class="op">%</span> (ex_value.message, tb_str)
+            <span class="cf">raise</span> ex_type(message)
+
+        <span class="cf">return</span> ret
+    <span class="cf">return</span> wrapper</code></pre></div>
+<p>Note: In the original version, the usage of <code>p.join()</code> causes a risk of deadlock situation if the object returned from the target function is too large. The above code has been modified and it seems to have solved the problem. More information can be found in the comment section of the <a href="https://gist.github.com/schlamar/2311116">Gist</a>.</p>
 <p>To use it, simply decorate the bulky function:</p>
 <div class="sourceCode"><pre class="sourceCode python"><code class="sourceCode python"><span class="at">@processify</span>
 <span class="kw">def</span> evaluate(features, model):
