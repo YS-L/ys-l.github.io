@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <!--<meta name="description" content="A layout example that shows off a blog page with a list of posts."> -->
-    <title>YS-L - Home</title>
+    <title>Home</title>
     <link rel="stylesheet" href="//cdn.jsdelivr.net/g/pure@0.6.0(pure-min.css+grids-responsive-min.css)">
     <!--
     <link rel="stylesheet" href="http://yui.yahooapis.com/pure/0.5.0/pure-min.css">
@@ -43,8 +43,8 @@
 
       <div class="sidebar pure-u-1">
         <div class="header">
-          <h1 class="brand-title">YS-L</h1>
-          <h2 class="brand-tagline">code, machine learning, and more</h2>
+          <h1 class="brand-title">Liau Yung Siang</h1>
+          <h2 class="brand-tagline">code, data, machine learning, ai</h2>
           <nav class="nav">
             <ul class="nav-list">
               <li class="nav-item">
@@ -76,6 +76,61 @@
 </style>
 <p class="home-padding">
 </p>
+
+  <div class="post-list-snippet">
+    <a href="./posts/2016/01/15/removing-the-close-button-on-chromiums-tab/" class="post-title">Removing the Close Button on Chromium's tab</a>
+    <span class="post-list-meta">January 15, 2016</span>
+    <p class="post-description">
+    <!--
+    
+    -->
+    <p>I have the <em>fat mouse syndrome</em> – there have been numerous times when I accidentally closed a tab when I actually meant to switch to that tab. I tend to keep many tabs open, which probably made the problem worse. It looks something like this:</p>
+<p><img src="./images/remove-close-buttons-before.png" style="width: 100%" /></p>
+<p>While Chromium automatically hides the close button when the length of the tabs becomes very small, it does not help much since fat mouse errors can occur way before that. Also, to close a tab, I normally use the middle mouse button or the keyboard shortcut <code>Ctrl-W</code>, yielding a complete negative utility for these close buttons. Apparently, I’m <a href="https://productforums.google.com/forum/#!topic/chrome/lke8SOdV5y0">not</a> <a href="http://stackoverflow.com/questions/11889044/any-way-to-remove-x-button-from-chrome-tabs">the</a> <a href="http://superuser.com/questions/199384/how-to-disable-the-close-x-button-on-google-chrome-tabs">only</a> <a href="https://www.reddit.com/r/chrome/comments/351vzd/is_there_a_way_to_remove_close_tab_x_button/">one</a> who got annoyed.</p>
+<h2 id="patching-chromium">Patching Chromium</h2>
+<p>Unfortunately, this aspect of UI isn’t user configurable. To get rid of these close buttons, some hacking on Chromium’s source code is required. I did that. It’s actually a little simpler than I had imagined thanks to the excellent code search engine and very high quality source code. After some digging, it turns out there is a well isolated function that decides whether the close button should be shown for each tab. To always hide the close button, simply short-circuit this function.</p>
+<p>As mentioned, the patch is quite simple:</p>
+<div class="sourceCode"><pre class="sourceCode diff"><code class="sourceCode diff">From f6283382f6f92581bd52202f400841753c5418e0 Mon Sep 17 00:00:00 2001
+From: Yung Siang Liau &lt;liauys@gmail.com&gt;
+Date: Sun, 1 Nov 2015 14:18:20 +0800
+Subject: [PATCH] Always hide close button
+
+<span class="kw">---</span>
+ chrome/browser/ui/tabs/tab_utils.cc | 3 +++
+ 1 file changed, 3 insertions(+)
+
+<span class="kw">diff --git a/chrome/browser/ui/tabs/tab_utils.cc b/chrome/browser/ui/tabs/tab_utils.cc</span>
+index cd088c4..3129461 100644
+<span class="kw">--- a/chrome/browser/ui/tabs/tab_utils.cc</span>
+<span class="dt">+++ b/chrome/browser/ui/tabs/tab_utils.cc</span>
+<span class="dt">@@ -132,12 +132,15 @@ bool ShouldTabShowMediaIndicator(int capacity,</span>
+ bool ShouldTabShowCloseButton(int capacity,
+                               bool is_pinned_tab,
+                               bool is_active_tab) {
+<span class="ot">+  return false;</span>
+<span class="ot">+  /*</span>
+   if (is_pinned_tab)
+     return false;
+   else if (is_active_tab)
+     return true;
+   else
+     return capacity &gt;= 3;
+<span class="ot">+  */</span>
+ }
+ 
+ TabMediaState GetTabMediaStateForContents(content::WebContents* contents) {
+<span class="st">-- </span>
+<span class="dt">2.6.3</span></code></pre></div>
+<p>Result (after two hours of compilation):</p>
+<p><img src="./images/remove-close-buttons-after.png" style="width: 100%" /></p>
+<p>Yes!</p>
+<h2 id="packaging-for-archlinux">Packaging (for ArchLinux)</h2>
+<p>I made an ArchLinux package description (PKGBUILD) for the above patched chromium based on the chromium package on ArchLinux official repository. It can be found <a href="https://github.com/YS-L/chromium-minimal-tab">here</a>.</p>
+    </p>
+  </div>
+  <div class="post-separator">
+    <i class="fa fa-gg"></i>
+  </div>
 
   <div class="post-list-snippet">
     <a href="./posts/2015/10/03/processifying-bulky-functions-in-python/" class="post-title">Processifying Bulky Functions in Python</a>
