@@ -76,7 +76,7 @@
   </p>
 </header>
 
- <p>Recently, I tripped over a use of the <code>apply</code> function in pandas in perhaps one of worst possible ways. The scenario is this: we have a DataFrame of a moderate size, say 1 million rows and a dozen columns. We want to perform some row-wise computation on the DataFrame and based on which generate a few new columns. <!--more--></p>
+ <p>Recently, I tripped over a use of the <code>apply</code> function in pandas in perhaps one of the worst possible ways. The scenario is this: we have a DataFrame of a moderate size, say 1 million rows and a dozen columns. We want to perform some row-wise computation on the DataFrame and based on which generate a few new columns. <!--more--></p>
 <p>Let’s also assume that the computation is rather complex, so those wonderful vectorized operations in that comes with pandas are out of question (the official <a href="http://pandas.pydata.org/pandas-docs/stable/enhancingperf.html">performance enhancement tips</a> is a nice read on this). And luckily it has been packaged as a function that returns a few values:</p>
 <div class="sourceCode"><pre class="sourceCode python"><code class="sourceCode python"><span class="kw">def</span> complex_computation(a):
     <span class="co"># do lots of work here...</span>
