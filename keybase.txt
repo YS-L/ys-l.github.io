@@ -1,0 +1,51 @@
+https://keybase.io/liauys
+--------------------------------------------------------------------
+
+I hereby claim:
+
+  * I am an admin of https://ys-l.github.io
+  * I am liauys (https://keybase.io/liauys) on keybase.
+  * I have a public key ASAzTx57Edln8xZW5qIk-WBCyrkKL_c87j5901kSgRIw1wo
+
+To do so, I am signing this object:
+
+{
+    "body": {
+        "key": {
+            "eldest_kid": "0120334f1e7b11d967f31656e6a224f96042cab90a2ff73cee3e7dd35912811230d70a",
+            "host": "keybase.io",
+            "kid": "0120334f1e7b11d967f31656e6a224f96042cab90a2ff73cee3e7dd35912811230d70a",
+            "uid": "8502d46cdace7645e21dfaca634a8619",
+            "username": "liauys"
+        },
+        "service": {
+            "hostname": "ys-l.github.io",
+            "protocol": "https:"
+        },
+        "type": "web_service_binding",
+        "version": 1
+    },
+    "client": {
+        "name": "keybase.io go client",
+        "version": "1.0.16"
+    },
+    "ctime": 1468042103,
+    "expire_in": 504576000,
+    "merkle_root": {
+        "ctime": 1468041095,
+        "hash": "fcdbdc573824c09206cc6397d137c6b3b50e3aa29fec790240fcd7cb52d41d5af69e6e57e4f3e57f03a0197949e2be35813b30cb9601204af377c755725bf591",
+        "seqno": 515273
+    },
+    "prev": "1bdbf889ae27dc19530d7ba45e9cc567f25e081b06e69d1a3885eebbd6742348",
+    "seqno": 8,
+    "tag": "signature"
+}
+
+which yields the signature:
+
+hKRib2R5hqhkZXRhY2hlZMOpaGFzaF90eXBlCqNrZXnEIwEgM08eexHZZ/MWVuaiJPlgQsq5Ci/3PO4+fdNZEoESMNcKp3BheWxvYWTFAvR7ImJvZHkiOnsia2V5Ijp7ImVsZGVzdF9raWQiOiIwMTIwMzM0ZjFlN2IxMWQ5NjdmMzE2NTZlNmEyMjRmOTYwNDJjYWI5MGEyZmY3M2NlZTNlN2RkMzU5MTI4MTEyMzBkNzBhIiwiaG9zdCI6ImtleWJhc2UuaW8iLCJraWQiOiIwMTIwMzM0ZjFlN2IxMWQ5NjdmMzE2NTZlNmEyMjRmOTYwNDJjYWI5MGEyZmY3M2NlZTNlN2RkMzU5MTI4MTEyMzBkNzBhIiwidWlkIjoiODUwMmQ0NmNkYWNlNzY0NWUyMWRmYWNhNjM0YTg2MTkiLCJ1c2VybmFtZSI6ImxpYXV5cyJ9LCJzZXJ2aWNlIjp7Imhvc3RuYW1lIjoieXMtbC5naXRodWIuaW8iLCJwcm90b2NvbCI6Imh0dHBzOiJ9LCJ0eXBlIjoid2ViX3NlcnZpY2VfYmluZGluZyIsInZlcnNpb24iOjF9LCJjbGllbnQiOnsibmFtZSI6ImtleWJhc2UuaW8gZ28gY2xpZW50IiwidmVyc2lvbiI6IjEuMC4xNiJ9LCJjdGltZSI6MTQ2ODA0MjEwMywiZXhwaXJlX2luIjo1MDQ1NzYwMDAsIm1lcmtsZV9yb290Ijp7ImN0aW1lIjoxNDY4MDQxMDk1LCJoYXNoIjoiZmNkYmRjNTczODI0YzA5MjA2Y2M2Mzk3ZDEzN2M2YjNiNTBlM2FhMjlmZWM3OTAyNDBmY2Q3Y2I1MmQ0MWQ1YWY2OWU2ZTU3ZTRmM2U1N2YwM2EwMTk3OTQ5ZTJiZTM1ODEzYjMwY2I5NjAxMjA0YWYzNzdjNzU1NzI1YmY1OTEiLCJzZXFubyI6NTE1MjczfSwicHJldiI6IjFiZGJmODg5YWUyN2RjMTk1MzBkN2JhNDVlOWNjNTY3ZjI1ZTA4MWIwNmU2OWQxYTM4ODVlZWJiZDY3NDIzNDgiLCJzZXFubyI6OCwidGFnIjoic2lnbmF0dXJlIn2jc2lnxECzfJRCQ7o+RPQ2v+rW+uQUwEKWUVvHCMIPLnd9cb6AS2eXc2qW+lo1alAnFw2o3GBSRAdPu5HJudL7DZWnJ88GqHNpZ190eXBlIKRoYXNogqR0eXBlCKV2YWx1ZcQgB62xt9WYi0CZ40Vupu0elNJ7eVfJBug7hqyXWNIS5NCjdGFnzQICp3ZlcnNpb24B
+
+And finally, I am proving ownership of this host by posting or
+appending to this document.
+
+View my publicly-auditable identity here: https://keybase.io/liauys
